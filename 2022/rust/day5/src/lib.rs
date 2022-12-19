@@ -6,7 +6,7 @@ use nom::{
     sequence::tuple,
     IResult,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 struct Operation {
     num_to_move: usize,
@@ -36,13 +36,13 @@ fn parse_command(input: &str) -> IResult<&str, Operation> {
         input,
         Operation {
             num_to_move,
-            src,
-            dst,
+            src: src - 1,
+            dst: dst - 1,
         },
     ))
 }
 
-fn print_stack_states(input: &HashMap<usize, Vec<char>>) {
+fn print_stack_states(input: &HashMap<usize, VecDeque<char>>) {
     for i in 0..input.len() {
         println!("Stack {i}:");
         for c in input.get(&i).unwrap() {
@@ -51,55 +51,84 @@ fn print_stack_states(input: &HashMap<usize, Vec<char>>) {
     }
 }
 
-pub fn part1(input: &str) -> &str {
-    let mut stacks: HashMap<usize, Vec<char>> = HashMap::new();
+fn get_top_states(input: &HashMap<usize, VecDeque<char>>) -> String {
+    let mut output: Vec<char> = Vec::with_capacity(input.len());
+    for i in 0..input.len() {
+        output.push(*input.get(&i).unwrap().front().unwrap());
+    }
 
-    let (stack_lines, operations) = input.split("\n\n").collect_tuple().unwrap(); // Split at the double new line
+    String::from_iter(output.iter())
+}
 
+fn parse_state_of_stacks(input: &str) -> HashMap<usize, VecDeque<char>> {
+    let mut stacks: HashMap<usize, VecDeque<char>> = HashMap::new();
     // 1. parse the current state of the stacks, store them in the hashmap
-    stack_lines.lines().for_each(|line| {
+    input.lines().for_each(|line| {
         line.chars()
             .skip(1)
             .step_by(4)
-            .inspect(|x| println!("This is x: {x}"))
             .enumerate()
             .for_each(|(stack, c)| {
                 if c.is_alphabetic() {
-                    println!("{c} is alphabetic: {stack}");
                     // we must put it in
                     if !stacks.contains_key(&stack) {
-                        stacks.insert(stack, Vec::new());
+                        stacks.insert(stack, VecDeque::new());
                     }
 
-                    stacks.get_mut(&stack).unwrap().push(c);
+                    stacks.get_mut(&stack).unwrap().push_back(c);
                 }
             })
     });
 
-    // 2. parse operations line by line and
+    stacks
+}
 
-    println!("{}", operations);
+pub fn part1(input: &str) -> String {
+    let (stack_lines, operations) = input.split("\n\n").collect_tuple().unwrap(); // Split at the double new line
+
+    let mut stacks = parse_state_of_stacks(&stack_lines);
+
     for operation in operations.lines() {
         let (_, op) = parse_command(operation).unwrap();
         let s_stack = stacks.get_mut(&op.src).unwrap();
-        let mut tmp_stack: Vec<char> = Vec::with_capacity(op.num_to_move);
+        let mut tmp_stack: VecDeque<char> = VecDeque::with_capacity(op.num_to_move);
         for _ in 0..op.num_to_move {
-            tmp_stack.push(s_stack.pop().unwrap());
+            tmp_stack.push_back(s_stack.pop_front().unwrap());
         }
-        tmp_stack.reverse();
-        let d_stack = stacks.get_mut(&op.dst).unwrap();
+        let d_stack = match stacks.get_mut(&op.dst) {
+            Some(v) => v,
+            None => panic!("No reference found for {}", op.dst),
+        };
         for _ in 0..op.num_to_move {
-            d_stack.push(tmp_stack.pop().unwrap());
+            d_stack.push_front(tmp_stack.pop_front().unwrap());
         }
-
-        print_stack_states(&stacks);
     }
 
-    "TET"
+    get_top_states(&stacks)
 }
 
-pub fn part2(input: &str) -> &str {
-    "TEST"
+pub fn part2(input: &str) -> String {
+    let (stack_lines, operations) = input.split("\n\n").collect_tuple().unwrap(); // Split at the double new line
+
+    let mut stacks = parse_state_of_stacks(&stack_lines);
+
+    for operation in operations.lines() {
+        let (_, op) = parse_command(operation).unwrap();
+        let s_stack = stacks.get_mut(&op.src).unwrap();
+        let mut tmp_stack: VecDeque<char> = VecDeque::with_capacity(op.num_to_move);
+        for _ in 0..op.num_to_move {
+            tmp_stack.push_back(s_stack.pop_front().unwrap());
+        }
+        let d_stack = match stacks.get_mut(&op.dst) {
+            Some(v) => v,
+            None => panic!("No reference found for {}", op.dst),
+        };
+        for _ in 0..op.num_to_move {
+            d_stack.push_front(tmp_stack.pop_back().unwrap()); // pop the back of the temp stack since the order doesn't change :)
+        }
+    }
+
+    get_top_states(&stacks)
 }
 
 #[cfg(test)]
@@ -112,5 +141,12 @@ mod tests {
         let input = fs::read_to_string("test.txt").unwrap();
         let ans = part1(&input);
         assert_eq!("CMZ", ans);
+    }
+
+    #[test]
+    fn part2_test() {
+        let input = fs::read_to_string("test.txt").unwrap();
+        let ans = part2(&input);
+        assert_eq!("MCD", ans);
     }
 }
