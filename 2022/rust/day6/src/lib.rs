@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use priority_queue::PriorityQueue;
 
 trait PushWithAppend {
@@ -25,7 +27,8 @@ fn do_work(input: &str, num_chars: usize) -> usize {
     for (i, c) in char_vec {
         q.push_with_append(&c);
         if i >= num_chars {
-            //nth is gross, probably a better way of doing this.. an obvious alternate is have is a copy of the vec? Borrow checker screws up attempts to just reuse the char_vec vec
+            // nth is gross, probably a better way of doing this.. an obvious alternate is have is a copy of the vec? Borrow checker screws up attempts to just reuse the char_vec vec
+            // Thinking perhaps having
             let c_to_reduce = &input.chars().nth(i - num_chars).unwrap();
 
             // start removing the last one
@@ -54,8 +57,23 @@ fn do_work(input: &str, num_chars: usize) -> usize {
     0
 }
 
+fn better_way(input: &str, window_size: usize) -> usize {
+    let char_vec = input.chars().collect::<Vec<char>>();
+
+    let output = char_vec
+        .windows(window_size)
+        .enumerate()
+        .find(|(i, x)| {
+            let set = x.iter().collect::<BTreeSet<&char>>();
+            x.len() == set.len()
+        })
+        .unwrap();
+    output.0 + window_size
+}
+
 pub fn part1(input: &str) -> usize {
-    do_work(input, 4)
+    // do_work(input, 4)
+    better_way(input, 4)
 }
 
 pub fn part2(input: &str) -> usize {
