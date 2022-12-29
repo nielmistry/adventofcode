@@ -1,82 +1,77 @@
-use std::cell::RefCell;
-use std::ops::Deref;
-use std::rc::{Rc, Weak};
+use rand::Rng;
+use std::collections::HashMap;
 
-// Reference: https://developerlife.com/2022/02/24/rust-non-binary-tree/#naive-approach-using-weak-and-strong-references
-type NodeDataRef<T> = Rc<NodeData<T>>;
-type WeakNodeDataRef<T> = Weak<NodeData<T>>;
-
-type Parent<T> = RefCell<WeakNodeDataRef<T>>;
-type Children<T> = RefCell<Vec<Child<T>>>;
-type Child<T> = NodeDataRef<T>;
-
-struct NodeData<T> {
-    value: T,
-    parent: Parent<T>,
-    children: Children<T>,
+enum ContentType {
+    Folder(u32),
+    File,
 }
 
-struct Node<T> {
-    r: NodeDataRef<T>,
+struct Content {
+    content_type: ContentType,
+    parent: Option<u32>,
+    children: Option<Vec<u32>>,
+    size: Option<u32>, // if folder, sum of sizes below. if file, size of file
 }
 
-impl<T> Deref for Node<T> {
-    type Target = NodeData<T>;
-    fn deref(&self) -> &Self::Target {
-        &self.r
+struct FolderStructure {
+    map: HashMap<u32, Content>,
+}
+
+fn generate_uid() -> u32 {
+    0
+}
+impl FolderStructure {
+    pub fn new() -> FolderStructure {
+        let mut map = HashMap::new();
+        map.insert(
+            0 as u32,
+            Content {
+                content_type: ContentType::Folder(0),
+                parent: None,
+                children: Some(Vec::new()),
+                size: None,
+            },
+        );
+        FolderStructure { map }
     }
-}
 
-impl<T> Node<T> {
-    pub fn new(value: T) -> Node<T> {
-        let new_node = NodeData {
-            value,
-            parent: RefCell::new(Weak::new()),
-            children: RefCell::new(Vec::new()),
+    pub fn add_content(&mut self, parent_id: u32, content: Content) {
+        let parent = self.map.get_mut(&parent_id).unwrap();
+        let uid = generate_uid();
+        parent.children.as_mut().unwrap().push(uid);
+        self.map.insert(uid, content);
+    }
+
+    fn modify_folders(&mut self, immediate_parent_id: u32, size: u32) {
+        let mut parent_id_opt = Some(immediate_parent_id);
+        while let Some(parent_id) = parent_id_opt {
+            let mut parent = self.map.get_mut(&parent_id).unwrap();
+            parent.size = Some(parent.size.unwrap_or(0) + size);
+            parent_id_opt = parent.parent;
+        }
+    }
+
+    pub fn add_file(&mut self, parent_id: u32, size: u32) {
+        let child = Content {
+            content_type: ContentType::File,
+            parent: Some(parent_id),
+            size: Some(size),
+            children: None,
         };
-        let rc_ref = Rc::new(new_node);
-        Node { r: rc_ref }
+
+        self.modify_folders(parent_id, size);
+        self.add_content(parent_id, child);
     }
 
-    pub fn get_node_ref_copy(self: &Self) -> NodeDataRef<T> {
-        Rc::clone(&self.r)
-    }
-
-    pub fn create_and_add_child(self: &Self, child_value: T) -> NodeDataRef<T> {
-        let child_node = Node::new(child_value);
-
-        {
-            let mut children = self.children.borrow_mut();
-            children.push(child_node.get_node_ref_copy());
-        }
-        {
-            let mut childs_parent = child_node.parent.borrow_mut();
-            *childs_parent = Rc::downgrade(&self.get_node_ref_copy());
-        }
-
-        child_node.get_node_ref_copy()
-    }
-
-    pub fn get_parent(self: &Self) -> Option<NodeDataRef<T>> {
-        let parent = self.parent.borrow();
-        let node_data = parent.upgrade();
-        if let Some(data) = node_data {
-            Some(data)
-        } else {
-            None
-        }
-    }
-}
-
-struct Tree<T> {
-    root: Node<T>,
-}
-
-impl<T> Tree<T> {
-    pub fn new(value: T) -> Tree<T> {
-        Tree {
-            root: Node::new(value),
-        }
+    pub fn add_folder(&mut self, parent_id: u32) {
+        let folder_key = generate_uid();
+        let child = Content {
+            content_type: ContentType::Folder(folder_key),
+            parent: Some(parent_id),
+            size: None,
+            children: Some(Vec::new()),
+        };
+        self.add_content(parent_id, child);
     }
 }
 
@@ -95,16 +90,12 @@ mod tests {
 
     #[test]
     fn tree_test() {
-        let tree: Tree<u32> = Tree::new(0);
-        tree.root.create_and_add_child(10);
-        tree.root.create_and_add_child(20);
+        let mut fs = FolderStructure::new();
+        fs.add_file(0, 10);
+        let test = fs.map.get(&0).unwrap();
+        assert_eq!(test.size, Some(10));
 
-        let children = tree.root.children.borrow();
-        assert_eq!(children.len(), 2);
-        let child1 = children.get(0).unwrap();
-        assert_eq!(child1.value, 10);
-
-        let parent = *child1.parent.borrow();
+        fs.add_folder(0);
     }
 
     #[test]
