@@ -20,6 +20,9 @@ struct FolderStructure {
 }
 
 fn get_hash(fully_qualified_path: &str) -> u64 {
+    if fully_qualified_path == "/" {
+        return 0;
+    }
     let mut hasher = DefaultHasher::new();
     fully_qualified_path.hash(&mut hasher);
     hasher.finish()
@@ -55,7 +58,25 @@ impl FolderStructure {
         }
     }
 
-    pub fn add_file(&mut self, fully_qualified_path: &str, parent_id: u64, size: u32) {
+    pub fn get_parent_id(&mut self, fully_qualified_path: &str) -> Result<u64, bool> {
+        let mut sub_paths = fully_qualified_path.split("/").collect::<Vec<&str>>();
+        // if sub_paths.len() <= 1 {
+        //     // We must be in the "/" case:
+        //     return Ok(get_hash(&"/"));
+        // }
+        sub_paths.pop(); // get rid of the last one
+        if fully_qualified_path.ends_with("/") {
+            // get rid of one more path because this is a folder!
+            sub_paths.pop();
+        }
+        let mut parent_path = sub_paths.join("/");
+        parent_path.push('/');
+        Ok(get_hash(&parent_path))
+    }
+
+    pub fn add_file(&mut self, fully_qualified_path: &str, size: u32) -> Result<bool, bool> {
+        let parent_id = self.get_parent_id(fully_qualified_path)?;
+
         let child = Content {
             content_type: ContentType::File,
             parent: Some(parent_id),
@@ -65,10 +86,13 @@ impl FolderStructure {
 
         self.modify_folders(parent_id, size);
         self.add_content(fully_qualified_path, parent_id, child);
+        Ok(true)
     }
 
-    pub fn add_folder(&mut self, fully_qualified_path: &str, parent_id: u64) -> u64 {
+    pub fn add_folder(&mut self, fully_qualified_path: &str) -> Result<u64, bool> {
         let folder_key = get_hash(fully_qualified_path);
+        let parent_id = self.get_parent_id(fully_qualified_path)?;
+
         let child = Content {
             content_type: ContentType::Folder(folder_key),
             parent: Some(parent_id),
@@ -76,7 +100,7 @@ impl FolderStructure {
             children: Some(Vec::new()),
         };
         self.add_content(fully_qualified_path, parent_id, child);
-        folder_key
+        Ok(folder_key)
     }
 }
 
@@ -96,12 +120,12 @@ mod tests {
     #[test]
     fn tree_test() {
         let mut fs = FolderStructure::new();
-        fs.add_file("/", 0, 10);
+        fs.add_file("/t2.log", 10);
         let test = fs.map.get(&0).unwrap();
         assert_eq!(test.size, Some(10));
 
-        let k = fs.add_folder("/test/", 0);
-        fs.add_file("/test/test.log", k, 20);
+        let k = fs.add_folder("/test/").unwrap();
+        fs.add_file("/test/test.log", 20);
 
         let test = fs.map.get(&0).unwrap();
         assert_eq!(test.size, Some(30));
@@ -109,11 +133,11 @@ mod tests {
         assert_eq!(test2.size, Some(20));
     }
 
-    #[test]
-    fn part1_test() {
-        let input = fs::read_to_string("test.txt").unwrap();
-        assert_eq!(part1(&input), 95437);
-    }
+    // #[test]
+    // fn part1_test() {
+    //     let input = fs::read_to_string("test.txt").unwrap();
+    //     assert_eq!(part1(&input), 95437);
+    // }
 
     // #[test]
     // fn part2_test() {
