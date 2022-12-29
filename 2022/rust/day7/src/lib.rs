@@ -159,7 +159,7 @@ fn parse_line(line: &str) -> ParseResult {
     }
 }
 
-pub fn part1(input: &str) -> usize {
+fn parse_file(input: &str) -> FolderStructure {
     let mut fs = FolderStructure::new();
     let lines = input.lines().collect::<Vec<&str>>();
     let mut current_fqp: String = "/".to_string();
@@ -197,8 +197,29 @@ pub fn part1(input: &str) -> usize {
             }
         }
     }
-    println!("hey!");
-    0
+
+    fs
+}
+
+pub fn part1(input: &str) -> u32 {
+    let mut fs = parse_file(input);
+    let mut output = 0;
+
+    // tally up any directories with size <= 100000
+    for (_key, value) in fs.map {
+        match value.content_type {
+            ContentType::File => {} //ignore
+            ContentType::Folder(_) => {
+                if let Some(v) = value.size {
+                    if v <= 100000 {
+                        output += value.size.unwrap();
+                    }
+                }
+            }
+        }
+    }
+
+    output
 }
 
 pub fn part2(input: &str) -> usize {
