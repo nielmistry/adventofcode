@@ -3,6 +3,8 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+use nom::{self, error::ParseError};
+
 enum ContentType {
     Folder(u64),
     File,
@@ -26,6 +28,18 @@ fn get_hash(fully_qualified_path: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
     fully_qualified_path.hash(&mut hasher);
     hasher.finish()
+}
+
+fn get_parent_path(path: &str) -> String {
+    let mut sub_paths = path.split("/").collect::<Vec<&str>>();
+    sub_paths.pop(); // get rid of the last one
+    if path.ends_with("/") {
+        // get rid of one more path because this is a folder!
+        sub_paths.pop();
+    }
+    let mut parent_path = sub_paths.join("/");
+    parent_path.push('/');
+    parent_path
 }
 impl FolderStructure {
     pub fn new() -> FolderStructure {
@@ -59,18 +73,7 @@ impl FolderStructure {
     }
 
     pub fn get_parent_id(&mut self, fully_qualified_path: &str) -> Result<u64, bool> {
-        let mut sub_paths = fully_qualified_path.split("/").collect::<Vec<&str>>();
-        // if sub_paths.len() <= 1 {
-        //     // We must be in the "/" case:
-        //     return Ok(get_hash(&"/"));
-        // }
-        sub_paths.pop(); // get rid of the last one
-        if fully_qualified_path.ends_with("/") {
-            // get rid of one more path because this is a folder!
-            sub_paths.pop();
-        }
-        let mut parent_path = sub_paths.join("/");
-        parent_path.push('/');
+        let parent_path = get_parent_path(fully_qualified_path);
         Ok(get_hash(&parent_path))
     }
 
@@ -90,8 +93,12 @@ impl FolderStructure {
     }
 
     pub fn add_folder(&mut self, fully_qualified_path: &str) -> Result<u64, bool> {
-        let folder_key = get_hash(fully_qualified_path);
-        let parent_id = self.get_parent_id(fully_qualified_path)?;
+        let mut fqp = String::from(fully_qualified_path);
+        if !fqp.ends_with("/") {
+            fqp.push('/');
+        }
+        let folder_key = get_hash(&fqp);
+        let parent_id = self.get_parent_id(&fqp)?;
 
         let child = Content {
             content_type: ContentType::Folder(folder_key),
@@ -99,12 +106,98 @@ impl FolderStructure {
             size: None,
             children: Some(Vec::new()),
         };
-        self.add_content(fully_qualified_path, parent_id, child);
+        self.add_content(&fqp, parent_id, child);
         Ok(folder_key)
     }
 }
 
+struct ListedFile<'b> {
+    name: &'b str,
+    size: u32,
+    t: ContentType,
+}
+
+enum ParseResult<'a> {
+    ChangeDirectory(&'a str),
+    ListFiles,
+    PrintResult(ListedFile<'a>),
+}
+
+fn parse_line(line: &str) -> ParseResult {
+    let subwords = line.split_ascii_whitespace().collect::<Vec<&str>>();
+
+    if subwords[0] == "$" {
+        // command
+        match subwords[1] {
+            "cd" => {
+                return ParseResult::ChangeDirectory(subwords[2]);
+            }
+            "ls" => return ParseResult::ListFiles,
+            _ => panic!("Unexpected Command!"),
+        }
+    } else {
+        match subwords[0] {
+            "dir" => {
+                return ParseResult::PrintResult(ListedFile {
+                    name: subwords[1],
+                    size: 0,
+                    t: ContentType::Folder(0),
+                });
+            }
+            _ => {
+                if let Ok(size) = subwords[0].parse::<u32>() {
+                    return ParseResult::PrintResult(ListedFile {
+                        name: subwords[1],
+                        size,
+                        t: ContentType::File,
+                    });
+                } else {
+                    panic!("Expected a size here!");
+                }
+            }
+        }
+    }
+}
+
 pub fn part1(input: &str) -> usize {
+    let mut fs = FolderStructure::new();
+    let lines = input.lines().collect::<Vec<&str>>();
+    let mut current_fqp: String = "/".to_string();
+
+    for line in lines {
+        let parsed_line = parse_line(line);
+        match parsed_line {
+            ParseResult::ChangeDirectory(new_dir) => match new_dir {
+                ".." => {
+                    let new_path = get_parent_path(&current_fqp);
+                    current_fqp = new_path;
+                }
+                _ => {
+                    if new_dir.starts_with("/") {
+                        // absolute path
+                        current_fqp = new_dir.to_string();
+                    } else {
+                        // relative path
+                        current_fqp = current_fqp + new_dir + "/";
+                    }
+                }
+            },
+
+            ParseResult::ListFiles => {}
+            ParseResult::PrintResult(res) => {
+                let path = current_fqp.clone() + res.name;
+                match res.t {
+                    ContentType::File => {
+                        fs.add_file(&path, res.size);
+                    }
+                    ContentType::Folder(_) => {
+                        fs.add_folder(&path);
+                    }
+                }
+            }
+        }
+    }
+    println!("hey!");
     0
 }
 
@@ -133,11 +226,11 @@ mod tests {
         assert_eq!(test2.size, Some(20));
     }
 
-    // #[test]
-    // fn part1_test() {
-    //     let input = fs::read_to_string("test.txt").unwrap();
-    //     assert_eq!(part1(&input), 95437);
-    // }
+    #[test]
+    fn part1_test() {
+        let input = fs::read_to_string("test.txt").unwrap();
+        assert_eq!(part1(&input), 95437);
+    }
 
     // #[test]
     // fn part2_test() {
