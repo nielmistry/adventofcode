@@ -5,6 +5,7 @@ use std::{
 
 use nom::{self, error::ParseError};
 
+#[derive(PartialEq)]
 enum ContentType {
     Folder(u64),
     File,
@@ -109,6 +110,10 @@ impl FolderStructure {
         self.add_content(&fqp, parent_id, child);
         Ok(folder_key)
     }
+
+    pub fn get_content(&self, fully_qualified_path: &str) -> Option<&Content> {
+        self.map.get(&get_hash(fully_qualified_path))
+    }
 }
 
 struct ListedFile<'b> {
@@ -202,7 +207,7 @@ fn parse_file(input: &str) -> FolderStructure {
 }
 
 pub fn part1(input: &str) -> u32 {
-    let mut fs = parse_file(input);
+    let fs = parse_file(input);
     let mut output = 0;
 
     // tally up any directories with size <= 100000
@@ -222,14 +227,36 @@ pub fn part1(input: &str) -> u32 {
     output
 }
 
-pub fn part2(input: &str) -> usize {
-    0
+pub fn part2(input: &str) -> u32 {
+    let fs = parse_file(input);
+    const TOTAL_FILESYSTEM_SIZE: u32 = 70_000_000;
+    const UPDATE_SIZE: u32 = 30_000_000;
+
+    let total_stored = fs.get_content("/").unwrap().size.unwrap();
+
+    let amount_to_clear = UPDATE_SIZE - (TOTAL_FILESYSTEM_SIZE - total_stored);
+
+    // although not strictly necessary, added the id so in theory we can delete the directory if we actually needed to
+    let mut eligible_dirs: Vec<(u32, u64)> = Vec::new();
+
+    for (key, value) in fs.map {
+        match value.content_type {
+            ContentType::Folder(_) => {
+                if value.size.unwrap() >= amount_to_clear {
+                    eligible_dirs.push((value.size.unwrap(), key));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    eligible_dirs.iter().min().unwrap().0
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{borrow::Borrow, fs};
+    use std::fs;
 
     #[test]
     fn tree_test() {
@@ -253,10 +280,10 @@ mod tests {
         assert_eq!(part1(&input), 95437);
     }
 
-    // #[test]
-    // fn part2_test() {
-    //     let input = fs::read_to_string("test.txt").unwrap();
-    //     let ans = part2(&input);
-    //     assert_eq!("MCD", ans);
-    // }
+    #[test]
+    fn part2_test() {
+        let input = fs::read_to_string("test.txt").unwrap();
+        let ans = part2(&input);
+        assert_eq!(24933642, ans);
+    }
 }
