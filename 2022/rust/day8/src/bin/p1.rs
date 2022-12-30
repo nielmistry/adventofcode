@@ -1,4 +1,4 @@
-use day7::part1;
+use day8::part1;
 use std::fs;
 
 fn main() {
