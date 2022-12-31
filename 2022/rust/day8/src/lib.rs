@@ -40,7 +40,7 @@ fn is_legal_move(
     dir: CardinalDirection,
     cur_coord: Coordinate,
     grid_size: Coordinate,
-) -> Result<Coordinate, bool> {
+) -> Option<Coordinate> {
     let proposed_move = match dir {
         CardinalDirection::Left => (-1, 0),
         CardinalDirection::Right => (1, 0),
@@ -59,9 +59,9 @@ fn is_legal_move(
         || new_coord.1 < 0
         || new_coord.1 >= grid_size.1
     {
-        return Err(true);
+        return None;
     } else {
-        return Ok((new_coord.0 as usize, new_coord.1 as usize));
+        return Some((new_coord.0 as usize, new_coord.1 as usize));
     }
 }
 
@@ -79,6 +79,15 @@ fn update_max_cardinal(
         .unwrap()
         .get_mut(cur_coord.0)
         .unwrap() = new_value;
+
+    println!(
+        "New Cardinal: {:?}",
+        max_cardinal
+            .get(cur_coord.1)
+            .unwrap()
+            .get(cur_coord.0)
+            .unwrap()
+    )
 }
 
 fn explore_direction(
@@ -119,7 +128,7 @@ fn explore_direction(
 
     if cur_coord == target {
         return;
-    } else if let Ok(legal_move) = is_legal_move(-dir, cur_coord, grid_size) {
+    } else if let Some(legal_move) = is_legal_move(-dir, cur_coord, grid_size) {
         explore_direction(
             dir,
             legal_move,
@@ -181,7 +190,16 @@ fn is_hidden(
                 0,
             );
 
-            println!("State of local max cardinal: {:?}", local_max_cardinal);
+            println!(
+                "State of local max cardinal [{:?}]: {:?}",
+                cur_coord,
+                max_cardinal
+                    .get(cur_coord.0)
+                    .unwrap()
+                    .get(cur_coord.1)
+                    .unwrap()
+                    .clone()
+            );
         }
 
         if *max_cardinal_directed < current_value {
@@ -233,7 +251,7 @@ pub fn part1(input: &str) -> u32 {
 
     for x in 0..width {
         for y in 0..height {
-            if x == 0 || y == 0 || x == width - 1 || height == width - 1 {
+            if x == 0 || y == 0 || x == width - 1 || y == width - 1 {
                 visible_list.push((x, y));
             } else {
                 unknown_list.push((x, y))
